@@ -58,23 +58,6 @@ impl Block {
         Block { data, hash }
     }
 
-    fn generate_on(chain: &mut Chain, message: String) {
-        let last_block = chain.local_queue.last().unwrap();
-        let index = last_block.data.index + 1;
-        let previous_hash = last_block.hash;
-        let timestamp = SystemTime::now();
-        let new_data = BlockData {
-            index,
-            previous_hash,
-            timestamp,
-            message,
-            nonce: 0,
-            difficulty: chain.get_difficulty(),
-        };
-        let new_block = Block::from_data(new_data);
-        chain.local_queue.push(new_block);
-    }
-
     fn validate_with_prev(&self, prev: &Block) -> bool {
         let mut hasher = DefaultHasher::new();
         self.data.hash(&mut hasher);
@@ -116,6 +99,24 @@ impl Default for Chain {
 impl Chain {
     pub fn get_latest(&self) -> &Block {
         self.local_queue.last().unwrap()
+    }
+
+    pub fn generate_block(self: &mut Self, message: String) -> Block {
+        let last_block = self.local_queue.last().unwrap();
+        let index = last_block.data.index + 1;
+        let previous_hash = last_block.hash;
+        let timestamp = SystemTime::now();
+        let new_data = BlockData {
+            index,
+            previous_hash,
+            timestamp,
+            message,
+            nonce: 0,
+            difficulty: self.get_difficulty(),
+        };
+        let new_block = Block::from_data(new_data);
+        self.local_queue.push(new_block.clone());
+        new_block
     }
 
     fn adjust_difficulty(&self, blk: &Block) -> u32 {

@@ -1,8 +1,12 @@
-use std::collections::HashSet;
+use std::{cmp, collections::HashSet, time::Duration};
 
 use actix::prelude::*;
+use rand::thread_rng;
 
-use crate::blockchain::{Block, Chain};
+use crate::{
+    blockchain::{Block, Chain},
+    rand_str::rand_string,
+};
 
 /// Message Definitons
 
@@ -37,7 +41,11 @@ struct ResponseWholeChain(Chain);
 
 #[derive(Message)]
 #[rtype(result = "()")]
-struct KeepMining;
+struct Mine;
+
+#[derive(Message)]
+#[rtype(result = "()")]
+struct Pulse(Duration);
 
 /// Actor Definitions
 
@@ -101,7 +109,49 @@ impl Handler<ResponseWholeChain> for Node {
     }
 }
 
-impl Handler<KeepMining> for Node {
+impl Handler<Mine> for Node {
     type Result = ();
-    fn handle(&mut self, msg: KeepMining, ctx: &mut Self::Context) -> Self::Result {}
+    fn handle(&mut self, _msg: Mine, ctx: &mut Self::Context) -> Self::Result {
+        let generated = self.chain.generate_block(rand_string(6));
+        // notify a bunch of neighbors
+        for peer in self.select_peers() {
+            let _ = peer.send(ResponseNewBlock {
+                block: generated.clone(),
+                source: ctx.address(),
+            });
+        }
+    }
+}
+
+const PULSE_DURATION: Duration = Duration::new(20, 0);
+
+// NOTE: in additional to broadcasting,
+// learn from peers regularly as well
+
+impl Handler<Pulse> for Node {
+    type Result = ();
+    fn handle(&mut self, msg: Pulse, ctx: &mut Self::Context) -> Self::Result {
+        for peer in self.select_peers() {
+            let _ = peer.send(RequestWholeChain(ctx.address()));
+        }
+        ctx.run_later(msg.0, move |_, ctx| {
+            let _ = ctx.address().send(msg);
+        });
+    }
+}
+
+const WHISPER_LIMIT: usize = 4;
+
+impl Node {
+    fn select_peers(&self) -> HashSet<NodeAddr> {
+        let num_to_sample = cmp::min(self.known_peers.len(), WHISPER_LIMIT);
+        let mut rng = thread_rng();
+        let peer_cnt = self.known_peers.len();
+        let vec: Vec<&NodeAddr> = self.known_peers.iter().collect();
+        let mut output = HashSet::new();
+        for idx in rand::seq::index::sample(&mut rng, peer_cnt, num_to_sample) {
+            output.insert(vec[idx].clone());
+        }
+        output
+    }
 }
