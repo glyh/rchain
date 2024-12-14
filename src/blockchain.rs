@@ -101,6 +101,11 @@ impl Chain {
         self.local_queue.last().unwrap()
     }
 
+    fn add_block_helper(self: &mut Self, block: Block) {
+        self.cumulative_diffculty += 1 << block.data.difficulty;
+        self.local_queue.push(block);
+    }
+
     pub fn generate_block(self: &mut Self, message: String) -> Block {
         let last_block = self.local_queue.last().unwrap();
         let index = last_block.data.index + 1;
@@ -115,7 +120,7 @@ impl Chain {
             difficulty: self.get_difficulty(),
         };
         let new_block = Block::from_data(new_data);
-        self.local_queue.push(new_block.clone());
+        self.add_block_helper(new_block.clone());
         new_block
     }
 
@@ -171,8 +176,7 @@ impl Chain {
     pub fn try_append(&mut self, target: Block) -> bool {
         let last = self.get_latest();
         if target.validate_with_prev_realtime(last) {
-            self.cumulative_diffculty += 1 << target.data.difficulty;
-            self.local_queue.push(target);
+            self.add_block_helper(target);
             true
         } else {
             false
